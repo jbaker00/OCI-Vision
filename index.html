@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Search - OCI Vision</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔍 Face Search</h1>
+            <p>Upload a reference face and search through multiple images</p>
+        </header>
+
+        <main>
+            <!-- Step 1: Upload Reference Face -->
+            <section class="card">
+                <h2>Step 1: Upload Reference Face</h2>
+                <p class="description">Upload the face you want to search for</p>
+                <div class="upload-area" id="referenceUploadArea">
+                    <input type="file" id="referenceImage" accept="image/*" capture="user">
+                    <label for="referenceImage" class="upload-label">
+                        <span class="upload-icon">📷</span>
+                        <span>Tap to upload or take photo</span>
+                    </label>
+                </div>
+                <div id="referencePreview" class="preview-area"></div>
+            </section>
+
+            <!-- Step 2: Upload Images to Search -->
+            <section class="card">
+                <h2>Step 2: Upload Images to Search</h2>
+                <p class="description">Upload multiple images to search through</p>
+                <div class="upload-area" id="searchUploadArea">
+                    <input type="file" id="searchImages" accept="image/*" multiple>
+                    <label for="searchImages" class="upload-label">
+                        <span class="upload-icon">🖼️</span>
+                        <span>Tap to upload images</span>
+                    </label>
+                </div>
+                <div id="searchPreview" class="preview-area"></div>
+            </section>
+
+            <!-- Step 3: Search Button -->
+            <section class="card">
+                <button id="searchButton" class="search-btn" disabled>
+                    🔍 Search for Face
+                </button>
+                <div id="progressBar" class="progress-bar" style="display: none;">
+                    <div class="progress-fill"></div>
+                    <span class="progress-text">Processing...</span>
+                </div>
+            </section>
+
+            <!-- Results Section -->
+            <section id="resultsSection" class="card results-card" style="display: none;">
+                <h2>Search Results</h2>
+                <div id="resultsContainer"></div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Powered by Oracle Cloud Infrastructure Vision API</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

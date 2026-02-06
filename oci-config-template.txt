@@ -1,0 +1,31 @@
+# OCI Configuration Template
+# Copy this file to ~/.oci/config (on Linux/Mac) or %USERPROFILE%\.oci\config (on Windows)
+# and fill in your OCI tenant details
+
+[DEFAULT]
+user=ocid1.user.oc1..YOUR_USER_OCID
+fingerprint=YOUR_KEY_FINGERPRINT
+tenancy=ocid1.tenancy.oc1..YOUR_TENANCY_OCID
+region=us-ashburn-1
+key_file=~/.oci/oci_api_key.pem
+
+# Example:
+# [DEFAULT]
+# user=ocid1.user.oc1..aaaaaaaabbbbbbbcccccccddddddd
+# fingerprint=ab:cd:ef:12:34:56:78:90:ab:cd:ef:12:34:56:78:90
+# tenancy=ocid1.tenancy.oc1..aaaaaaaabbbbbbbcccccccddddddd
+# region=us-ashburn-1
+# key_file=C:\Users\YourName\.oci\oci_api_key.pem
+
+# To get your OCI credentials:
+# 1. Log in to Oracle Cloud Console (cloud.oracle.com)
+# 2. Click on your profile icon (top right) → User Settings
+# 3. Under "Resources" on the left, click "API Keys"
+# 4. Click "Add API Key" and generate a new key pair
+# 5. Download the private key and save it as oci_api_key.pem in ~/.oci/ directory
+# 6. Copy the configuration preview shown and paste it in ~/.oci/config
+
+# Required OCI Policies:
+# Your user or group needs the following policy to use Vision service:
+# Allow group <your-group> to use ai-service-vision-family in tenancy
+# Allow group <your-group> to read objectstorage-namespaces in tenancy
