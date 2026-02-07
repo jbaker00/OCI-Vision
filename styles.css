@@ -55,6 +55,36 @@ header p {
     font-size: 0.95rem;
 }
 
+.provider-toggle {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.provider-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border: 2px solid #e0e4ff;
+    border-radius: 10px;
+    background: #f8f9ff;
+    cursor: pointer;
+    font-weight: 600;
+    color: #4a4a4a;
+    transition: all 0.2s ease;
+}
+
+.provider-option input {
+    accent-color: #667eea;
+}
+
+.provider-option:has(input:checked) {
+    border-color: #667eea;
+    background: #eef0ff;
+    color: #3b3f8c;
+}
+
 .upload-area {
     position: relative;
     margin-top: 15px;

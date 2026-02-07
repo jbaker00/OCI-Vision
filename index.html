@@ -42,7 +42,27 @@
                 <div id="searchPreview" class="preview-area"></div>
             </section>
 
-            <!-- Step 3: Search Button -->
+            <!-- Step 3: Choose Provider -->
+            <section class="card">
+                <h2>Step 3: Choose Provider</h2>
+                <p class="description">Select which vision service to use</p>
+                <div class="provider-toggle" role="radiogroup" aria-label="Vision provider">
+                    <label class="provider-option">
+                        <input type="radio" name="provider" value="oci" checked>
+                        <span>OCI Vision</span>
+                    </label>
+                    <label class="provider-option">
+                        <input type="radio" name="provider" value="gcp">
+                        <span>Google Cloud Vision</span>
+                    </label>
+                    <label class="provider-option">
+                        <input type="radio" name="provider" value="python">
+                        <span>Python face_recognition</span>
+                    </label>
+                </div>
+            </section>
+
+            <!-- Step 4: Search Button -->
             <section class="card">
                 <button id="searchButton" class="search-btn" disabled>
                     🔍 Search for Face
@@ -61,7 +81,7 @@
         </main>
 
         <footer>
-            <p>Powered by Oracle Cloud Infrastructure Vision API</p>
+            <p>Powered by OCI Vision, Google Cloud Vision, or Python face_recognition</p>
         </footer>
     </div>
 

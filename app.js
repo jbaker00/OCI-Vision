@@ -10,6 +10,7 @@ const searchButton = document.getElementById('searchButton');
 const progressBar = document.getElementById('progressBar');
 const resultsSection = document.getElementById('resultsSection');
 const resultsContainer = document.getElementById('resultsContainer');
+const providerInputs = document.querySelectorAll('input[name="provider"]');
 
 // Event Listeners
 referenceInput.addEventListener('change', handleReferenceUpload);
@@ -86,6 +87,11 @@ function updateSearchButton() {
     searchButton.disabled = !(referenceImage && searchImages.length > 0);
 }
 
+function getSelectedProvider() {
+    const selected = Array.from(providerInputs).find(input => input.checked);
+    return selected ? selected.value : 'oci';
+}
+
 // Perform face search
 async function performSearch() {
     // Show progress
@@ -98,6 +104,7 @@ async function performSearch() {
         // Create FormData
         const formData = new FormData();
         formData.append('referenceImage', referenceImage);
+        formData.append('provider', getSelectedProvider());
         searchImages.forEach((file, index) => {
             formData.append('searchImages', file);
         });

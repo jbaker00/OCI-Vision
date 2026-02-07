@@ -17,6 +17,8 @@ A mobile-friendly web application that uses Oracle Cloud Infrastructure (OCI) Vi
 - Oracle Cloud Infrastructure (OCI) account
 - OCI Vision API access enabled
 - OCI CLI configured or API keys generated
+- (Optional) Google Cloud Vision API enabled
+- (Optional) Python 3.9+ with face_recognition installed
 
 ## Setup Instructions
 
@@ -101,6 +103,35 @@ OCI_CONFIG_FILE=/path/to/config OCI_PROFILE=YOUR_PROFILE_NAME npm start
 
 The server will start on `http://localhost:3000`
 
+## Optional: Use Google Cloud Vision
+
+You can switch the UI provider to **Google Cloud Vision** instead of OCI.
+
+### GCP Setup
+1. Enable the Vision API in your GCP project.
+2. Configure Application Default Credentials (ADC) on this machine:
+   ```bash
+   gcloud auth application-default login
+   ```
+   Or set a service account key:
+   ```bash
+   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+   ```
+3. Start the app normally and pick **Google Cloud Vision** in the UI.
+
+## Optional: Use Python face_recognition
+
+You can switch the UI provider to **Python face_recognition** for local face comparison.
+
+### Python Setup
+1. Ensure Python 3.9+ is installed and available as `python3`.
+2. Install the dependency:
+   ```bash
+   pip install face_recognition
+   ```
+   Note: On macOS, this package requires build tools for `dlib`. If install fails, use a prebuilt wheel or install `cmake`/Xcode Command Line Tools.
+3. Start the app normally and pick **Python face_recognition** in the UI.
+
 ## Usage
 
 ### On Desktop:
@@ -140,6 +171,7 @@ OCI Vision/
 ├── styles.css          # Mobile-responsive styling
 ├── app.js              # Frontend JavaScript
 ├── server.js           # Node.js backend server
+├── face_recognition_compare.py  # Python face_recognition helper
 ├── package.json        # Node.js dependencies
 ├── oci-config-template.txt  # OCI config template
 └── README.md           # This file
@@ -160,10 +192,20 @@ OCI Vision/
 - Check that your API key file path is correct
 - Ensure your user OCID, tenancy OCID, and fingerprint are correct
 
+### "GCP Vision client initialization failed"
+- Ensure the Vision API is enabled in your GCP project
+- Verify Application Default Credentials are set up (`gcloud auth application-default login`)
+- If using a service account, confirm `GOOGLE_APPLICATION_CREDENTIALS` points to a valid JSON key
+
 ### "No face detected in reference image"
 - Use a clear, well-lit photo with a visible face
 - Ensure the face is not too small or too large in the frame
 - Try a different photo angle
+
+### "Python face recognition failed"
+- Confirm `python3` is available in your PATH
+- Ensure `face_recognition` is installed (`pip show face_recognition`)
+- If `dlib` install fails, install Xcode Command Line Tools and `cmake`
 
 ### Mobile device can't connect
 - Ensure both devices are on the same WiFi network
