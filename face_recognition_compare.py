@@ -7,7 +7,12 @@ import face_recognition
 
 def load_encodings(image_path: str) -> List[list]:
     image = face_recognition.load_image_file(image_path)
-    return face_recognition.face_encodings(image)
+    # Try with increasing upsample levels to detect small/distant faces
+    for upsample in (1, 2):
+        locations = face_recognition.face_locations(image, number_of_times_to_upsample=upsample)
+        if locations:
+            return face_recognition.face_encodings(image, known_face_locations=locations)
+    return []
 
 
 def main() -> None:

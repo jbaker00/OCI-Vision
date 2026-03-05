@@ -24,7 +24,8 @@ app.use(express.static('.'));
 // OCI Configuration
 let visionClient;
 let gcpVisionClient;
-const OCI_VISION_DELAY_MS = Number(process.env.OCI_VISION_DELAY_MS || 1200);
+const OCI_VISION_DELAY_MS = Number(process.env.OCI_VISION_DELAY_MS || 2000);
+const OCI_MAX_RETRIES = Number(process.env.OCI_MAX_RETRIES || 4);
 const PYTHON_COMMAND = process.env.PYTHON || 'python';
 const PYTHON_FACE_THRESHOLD = Number(process.env.FACE_RECOGNITION_THRESHOLD || 0.6);
 
@@ -170,9 +171,6 @@ async function detectFaces(imageBuffer, provider) {
             };
         }
 
-        if (OCI_VISION_DELAY_MS > 0) {
-            await sleep(OCI_VISION_DELAY_MS);
-        }
         const analyzeImageDetails = {
             features: [
                 {
@@ -188,13 +186,30 @@ async function detectFaces(imageBuffer, provider) {
 
         const analyzeImageRequest = {
             analyzeImageDetails: analyzeImageDetails,
-            retryConfiguration: process.env.OCI_DISABLE_RETRY === 'true'
-                ? common.NoRetryConfigurationDetails
-                : undefined
+            retryConfiguration: common.NoRetryConfigurationDetails
         };
 
-        const response = await visionClient.analyzeImage(analyzeImageRequest);
-        return response.analyzeImageResult;
+        let lastError;
+        for (let attempt = 0; attempt <= OCI_MAX_RETRIES; attempt++) {
+            const delay = OCI_VISION_DELAY_MS * Math.pow(2, attempt);
+            if (delay > 0) {
+                console.log(`OCI Vision: waiting ${delay}ms before request (attempt ${attempt + 1})`);
+                await sleep(delay);
+            }
+            try {
+                const response = await visionClient.analyzeImage(analyzeImageRequest);
+                return response.analyzeImageResult;
+            } catch (err) {
+                lastError = err;
+                const msg = err?.message || '';
+                const isRateLimit = msg.includes('sync-transactions-per-second-count');
+                if (!isRateLimit || attempt === OCI_MAX_RETRIES) {
+                    throw err;
+                }
+                console.warn(`OCI rate limit hit, retrying (attempt ${attempt + 1}/${OCI_MAX_RETRIES})...`);
+            }
+        }
+        throw lastError;
     } catch (error) {
         const formatted = provider === 'gcp' ? error : formatOciError(error);
         console.error('Error detecting faces:', formatted);
