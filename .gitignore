@@ -37,3 +37,13 @@ temp/
 
 # Uploaded files
 uploads/
+
+# Image files
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.webp
+*.svg
