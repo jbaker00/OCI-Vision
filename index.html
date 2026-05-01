@@ -48,16 +48,19 @@
                 <p class="description">Select which vision service to use</p>
                 <div class="provider-toggle" role="radiogroup" aria-label="Vision provider">
                     <label class="provider-option">
-                        <input type="radio" name="provider" value="oci" checked>
-                        <span>OCI Vision</span>
+                        <input type="radio" name="provider" value="python" checked>
+                        <span>Python face_recognition</span>
+                        <span class="provider-note">✓ Recommended — matches identity using face encodings</span>
                     </label>
                     <label class="provider-option">
                         <input type="radio" name="provider" value="gcp">
                         <span>Google Cloud Vision</span>
+                        <span class="provider-note">Detection only — shows if faces exist, not who they are</span>
                     </label>
                     <label class="provider-option">
-                        <input type="radio" name="provider" value="python">
-                        <span>Python face_recognition</span>
+                        <input type="radio" name="provider" value="oci" disabled>
+                        <span>OCI Vision</span>
+                        <span class="provider-note">(Requires OCI enterprise — disabled)</span>
                     </label>
                 </div>
             </section>

@@ -160,18 +160,25 @@ function displayResults(results) {
     results.matches.forEach((match, index) => {
         const resultDiv = document.createElement('div');
         resultDiv.className = 'result-item';
-        
-        const matchClass = match.isMatch ? 'match' : 'no-match';
-        const matchText = match.isMatch ? '✓ Match Found' : '✗ No Match';
-        
+
+        let matchClass, matchText, confidenceHtml;
+        if (match.detectionOnly) {
+            const faceCount = match.facesFound || 0;
+            matchClass = faceCount > 0 ? 'detection' : 'no-match';
+            matchText = faceCount > 0 ? `Face Detected (${faceCount})` : 'No Face';
+            confidenceHtml = '';
+        } else {
+            matchClass = match.isMatch ? 'match' : 'no-match';
+            matchText = match.isMatch ? '✓ Match Found' : '✗ No Match';
+            confidenceHtml = `<div class="result-confidence">Confidence: ${(match.confidence * 100).toFixed(1)}%</div>`;
+        }
+
         resultDiv.innerHTML = `
             <img src="${match.imageUrl}" alt="Result ${index + 1}">
             <div class="result-info">
                 <div class="result-match ${matchClass}">${matchText}</div>
-                <div class="result-confidence">
-                    Confidence: ${(match.confidence * 100).toFixed(1)}%
-                </div>
-                ${match.facesFound ? `<div class="result-confidence">Faces found: ${match.facesFound}</div>` : ''}
+                ${confidenceHtml}
+                ${match.facesFound && !match.detectionOnly ? `<div class="result-confidence">Faces found: ${match.facesFound}</div>` : ''}
             </div>
         `;
         resultsContainer.appendChild(resultDiv);

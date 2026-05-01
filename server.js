@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
@@ -7,6 +8,7 @@ const { spawn } = require('child_process');
 const vision = require('oci-aivision');
 const common = require('oci-common');
 const { ImageAnnotatorClient } = require('@google-cloud/vision');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // Initialize Express
 const app = express();
@@ -24,6 +26,17 @@ app.use(express.static('.'));
 // OCI Configuration
 let visionClient;
 let gcpVisionClient;
+let geminiAI;
+try {
+    if (process.env.GEMINI_API_KEY) {
+        geminiAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        console.log('Gemini AI initialized for GCP face comparison');
+    } else {
+        console.warn('GEMINI_API_KEY not set — GCP face comparison unavailable');
+    }
+} catch (e) {
+    console.error('Failed to initialize Gemini AI:', e.message);
+}
 const OCI_VISION_DELAY_MS = Number(process.env.OCI_VISION_DELAY_MS || 2000);
 const OCI_MAX_RETRIES = Number(process.env.OCI_MAX_RETRIES || 4);
 const PYTHON_COMMAND = process.env.PYTHON || 'python';
@@ -35,21 +48,48 @@ function sleep(ms) {
 
 async function initializeOCIClient() {
     try {
-        // Use config file authentication
-        const configFilePath = process.env.OCI_CONFIG_FILE || undefined;
+        // If individual OCI env vars are provided (e.g. Cloud Run), write a temp config file
+        let configFilePath = process.env.OCI_CONFIG_FILE;
+        if (!configFilePath && process.env.OCI_USER && process.env.OCI_PRIVATE_KEY_FILE) {
+            const tempDir = path.join(os.tmpdir(), 'oci-init');
+            await fs.promises.mkdir(tempDir, { recursive: true });
+            configFilePath = path.join(tempDir, 'config');
+            const configContent = [
+                '[DEFAULT]',
+                `user=${process.env.OCI_USER}`,
+                `fingerprint=${process.env.OCI_FINGERPRINT}`,
+                `tenancy=${process.env.OCI_TENANCY}`,
+                `region=${process.env.OCI_REGION || 'us-phoenix-1'}`,
+                `key_file=${process.env.OCI_PRIVATE_KEY_FILE}`,
+            ].join('\n');
+            await fs.promises.writeFile(configFilePath, configContent);
+            console.log(`Wrote OCI config to ${configFilePath}`);
+            console.log(`  user=${process.env.OCI_USER}`);
+            console.log(`  fingerprint=${process.env.OCI_FINGERPRINT}`);
+            console.log(`  tenancy=${process.env.OCI_TENANCY}`);
+            console.log(`  region=${process.env.OCI_REGION || 'us-phoenix-1'}`);
+            console.log(`  key_file=${process.env.OCI_PRIVATE_KEY_FILE}`);
+            // Verify key file exists and is readable
+            try {
+                const keyContent = await fs.promises.readFile(process.env.OCI_PRIVATE_KEY_FILE, 'utf8');
+                console.log(`OCI private key file readable, length=${keyContent.length}, starts with: ${keyContent.substring(0,27)}`);
+            } catch (keyErr) {
+                console.error(`OCI private key file NOT readable: ${keyErr.message}`);
+            }
+        }
+        configFilePath = configFilePath || path.join(os.homedir(), '.oci', 'config');
         const profile = process.env.OCI_PROFILE || undefined;
         const provider = new common.ConfigFileAuthenticationDetailsProvider(
             configFilePath,
             profile
         );
-        
+
         visionClient = new vision.AIServiceVisionClient({
             authenticationDetailsProvider: provider
         });
 
-        const configPathLabel = configFilePath || '~/.oci/config';
         const profileLabel = profile || 'DEFAULT';
-        console.log(`OCI Vision client initialized successfully (config: ${configPathLabel}, profile: ${profileLabel})`);
+        console.log(`OCI Vision client initialized successfully (config: ${configFilePath}, profile: ${profileLabel})`);
     } catch (error) {
         console.error('Error initializing OCI client:', error);
         throw error;
@@ -70,7 +110,9 @@ function formatOciError(error) {
     }
 
     const statusCode = error.statusCode || error.httpStatusCode;
-    const serviceCode = error.serviceCode || error.code;
+    // Coerce to string — OCI SDK sometimes returns non-string serviceCode, causing toLowerCase crash
+    const rawCode = error.serviceCode || error.code;
+    const serviceCode = rawCode != null ? String(rawCode) : undefined;
     const message = error.message || error.detail || error.msg;
     const opcRequestId = error.opcRequestId || error.requestId;
 
@@ -117,6 +159,13 @@ async function runPythonFaceCompare(referenceImage, searchImages) {
         const pythonProcess = spawn(PYTHON_COMMAND, [scriptPath], {
             stdio: ['pipe', 'pipe', 'pipe']
         });
+
+        const pythonTimeout = setTimeout(() => {
+            console.error('Python face_recognition timed out after 120 seconds, killing process');
+            pythonProcess.kill();
+        }, 120000);
+
+        pythonProcess.on('close', () => clearTimeout(pythonTimeout));
 
         pythonProcess.stdout.on('data', (chunk) => {
             stdoutChunks.push(chunk);
@@ -167,7 +216,8 @@ async function detectFaces(imageBuffer, provider) {
             return {
                 detectedFaces: faces.map(face => ({
                     qualityScore: face.detectionConfidence || 0.7
-                }))
+                })),
+                detectionOnly: true
             };
         }
 
@@ -191,9 +241,10 @@ async function detectFaces(imageBuffer, provider) {
 
         let lastError;
         for (let attempt = 0; attempt <= OCI_MAX_RETRIES; attempt++) {
-            const delay = OCI_VISION_DELAY_MS * Math.pow(2, attempt);
-            if (delay > 0) {
-                console.log(`OCI Vision: waiting ${delay}ms before request (attempt ${attempt + 1})`);
+            // Only delay on retries (attempt > 0), not the first request
+            if (attempt > 0) {
+                const delay = OCI_VISION_DELAY_MS * Math.pow(2, attempt - 1);
+                console.log(`OCI Vision: waiting ${delay}ms before retry (attempt ${attempt + 1})`);
                 await sleep(delay);
             }
             try {
@@ -202,6 +253,17 @@ async function detectFaces(imageBuffer, provider) {
             } catch (err) {
                 lastError = err;
                 const msg = err?.message || '';
+                console.error(`OCI analyzeImage error (attempt ${attempt}): [${err?.constructor?.name}] ${msg}`);
+                // OCI SDK bug: crashes with TypeError when processing certain error responses.
+                // Check by message alone since instanceof can fail across module boundaries.
+                if (msg.includes('toLowerCase')) {
+                    const sdkErr = new Error(
+                        'OCI Vision API request failed — possible policy/permissions issue. ' +
+                        'Ensure this OCI user has: Allow group <group> to use ai-service-vision-family in tenancy'
+                    );
+                    console.error('OCI SDK bug detected (likely auth/policy issue on OCI side)');
+                    throw sdkErr;
+                }
                 const isRateLimit = msg.includes('sync-transactions-per-second-count');
                 if (!isRateLimit || attempt === OCI_MAX_RETRIES) {
                     throw err;
@@ -274,6 +336,46 @@ function calculateFaceSimilarity(face1, face2) {
     return Math.min(avgQuality, 0.95);
 }
 
+// Compare two face images using Gemini multimodal AI
+async function compareFacesWithGemini(refBuffer, refMime, searchBuffer, searchMime) {
+    if (!geminiAI) throw new Error('Gemini AI not initialized. Check GEMINI_API_KEY.');
+
+    const model = geminiAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+    const prompt = `You are a face recognition expert. Compare these two images.
+Image 1 is the REFERENCE face to search for.
+Image 2 is the SEARCH image to check.
+
+Does Image 2 contain the same person as Image 1?
+
+Reply ONLY with valid JSON in this exact format (no markdown, no explanation):
+{"isMatch": true, "confidence": 0.92, "facesFound": 1, "reasoning": "same nose bridge and eye spacing"}
+
+Rules:
+- isMatch: true if you believe it is the same person, false otherwise
+- confidence: 0.0 to 1.0 (how certain you are)
+- facesFound: number of faces detected in Image 2 (0 if no face)
+- reasoning: one short phrase explaining your decision
+- If no face in Image 2, return {"isMatch": false, "confidence": 0, "facesFound": 0, "reasoning": "no face detected"}`;
+
+    const result = await model.generateContent([
+        prompt,
+        { inlineData: { mimeType: refMime, data: refBuffer.toString('base64') } },
+        { inlineData: { mimeType: searchMime, data: searchBuffer.toString('base64') } },
+    ]);
+
+    const text = result.response.text().trim();
+    // Strip markdown code fences if present
+    const jsonText = text.replace(/^```json?\s*/i, '').replace(/\s*```$/, '').trim();
+    const parsed = JSON.parse(jsonText);
+    return {
+        isMatch: !!parsed.isMatch,
+        confidence: Number(parsed.confidence) || 0,
+        facesFound: Number(parsed.facesFound) || 0,
+        reasoning: parsed.reasoning || '',
+    };
+}
+
 // API endpoint for face search
 app.post('/api/search-face', upload.fields([
     { name: 'referenceImage', maxCount: 1 },
@@ -318,7 +420,6 @@ app.post('/api/search-face', upload.fields([
                     confidence: 0,
                     facesFound: 0
                 };
-
                 return {
                     imageUrl: `data:${searchImage.mimetype};base64,${searchImage.buffer.toString('base64')}`,
                     filename: searchImage.originalname,
@@ -331,11 +432,48 @@ app.post('/api/search-face', upload.fields([
             return res.json({ matches });
         }
 
-        // Detect faces in reference image
+        if (provider === 'gcp') {
+            // Use Gemini multimodal AI for real face identity comparison
+            console.log('Using Gemini AI for face identity comparison');
+            if (!geminiAI) {
+                return res.status(500).json({ error: 'Gemini AI not configured. Check GEMINI_API_KEY.' });
+            }
+
+            const matches = [];
+            for (let i = 0; i < searchImages.length; i++) {
+                const searchImage = searchImages[i];
+                console.log(`Gemini: comparing search image ${i + 1}/${searchImages.length}: ${searchImage.originalname}`);
+                try {
+                    const comparison = await compareFacesWithGemini(
+                        referenceImage.buffer, referenceImage.mimetype,
+                        searchImage.buffer, searchImage.mimetype
+                    );
+                    console.log(`  isMatch=${comparison.isMatch} confidence=${comparison.confidence} reasoning="${comparison.reasoning}"`);
+                    matches.push({
+                        imageUrl: `data:${searchImage.mimetype};base64,${searchImage.buffer.toString('base64')}`,
+                        filename: searchImage.originalname,
+                        isMatch: comparison.isMatch,
+                        confidence: comparison.confidence,
+                        facesFound: comparison.facesFound,
+                        reasoning: comparison.reasoning,
+                    });
+                } catch (error) {
+                    console.error(`Gemini error on ${searchImage.originalname}:`, error.message);
+                    matches.push({
+                        imageUrl: `data:${searchImage.mimetype};base64,${searchImage.buffer.toString('base64')}`,
+                        filename: searchImage.originalname,
+                        isMatch: false,
+                        confidence: 0,
+                        error: error.message,
+                    });
+                }
+            }
+            return res.json({ matches });
+        }
+
+        // OCI provider
         const referenceResult = await detectFaces(referenceImage.buffer, provider);
         const referenceFaces = referenceResult.detectedFaces || [];
-
-        console.log('Reference result:', JSON.stringify(referenceResult, null, 2));
 
         if (referenceFaces.length === 0) {
             return res.json({
@@ -343,30 +481,16 @@ app.post('/api/search-face', upload.fields([
             });
         }
 
-        console.log(`Found ${referenceFaces.length} face(s) in reference image`);
-
-        // Process each search image
         const matches = [];
         for (let i = 0; i < searchImages.length; i++) {
             const searchImage = searchImages[i];
             console.log(`Processing search image ${i + 1}/${searchImages.length}: ${searchImage.originalname}`);
-
             try {
-                // Detect faces in search image
                 const searchResult = await detectFaces(searchImage.buffer, provider);
                 const searchFaces = searchResult.detectedFaces || [];
-
-                console.log(`  Found ${searchFaces.length} face(s) in ${searchImage.originalname}`);
-
-                // Compare faces
                 const comparison = compareFaces(referenceFaces, searchFaces);
-                console.log(`  Match result: ${comparison.isMatch}, confidence: ${comparison.confidence}`);
-
-                // Convert image to base64 for display
-                const imageBase64 = `data:${searchImage.mimetype};base64,${searchImage.buffer.toString('base64')}`;
-
                 matches.push({
-                    imageUrl: imageBase64,
+                    imageUrl: `data:${searchImage.mimetype};base64,${searchImage.buffer.toString('base64')}`,
                     filename: searchImage.originalname,
                     isMatch: comparison.isMatch,
                     confidence: comparison.confidence,
@@ -400,10 +524,11 @@ app.post('/api/search-face', upload.fields([
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-    res.json({ 
-        status: 'ok', 
+    res.json({
+        status: 'ok',
         ociConfigured: !!visionClient,
-        gcpConfigured: !!gcpVisionClient
+        gcpConfigured: !!gcpVisionClient,
+        geminiConfigured: !!geminiAI,
     });
 });
 

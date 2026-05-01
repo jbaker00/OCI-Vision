@@ -272,6 +272,22 @@ header p {
     color: #721c24;
 }
 
+.result-match.detection {
+    background: #e3f2fd;
+    color: #1565c0;
+}
+
+.provider-option input:disabled + span {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.provider-note {
+    font-size: 0.75em;
+    color: #888;
+    display: block;
+}
+
 .result-confidence {
     color: #666;
     font-size: 0.9rem;
